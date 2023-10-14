@@ -1,24 +1,44 @@
-struct TrackedArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+struct TrackedArray{T,N,A<:AbstractArray{T,N}, Tr} <: AbstractArray{T,N}
     data::A
-    tracker::_Tracker{A}
+    tracker::Tr
     grad::A # todo: grad appears twice
-    TrackedArray{T,N,A}(t::_Tracker{A}, data::A) where {T,N,A} = new(t, data)
-    TrackedArray{T,N,A}(t::_Tracker{A}, data::A, grad::A) where {T,N,A} = new(t, data, grad)
+    TrackedArray{T,N,A,Tr}(data::A, tr::Tr) where {T,N,A,Tr} = new(data, tr)
+    TrackedArray{T,N,A,Tr}(data::A, tr::Tr, grad::A) where {T,N,A,Tr} = new(data, tr, grad)
 end
 
-mutable struct _Tracker{T, Pb, Parents}
-    pullback::Pb # a pullback function or nothing for leafs
-    parents::Parents # Tuple of Union{TrackedArray, TrackedReal, TrackedTuple, NotTracked}
-    grad::T # TODO: grad appears twice    
-    ref::UInt32 # currently used by the backpropagation algo
-    isleaf::Bool #TODO: isnt's pullback == nothing enough for the isleaf check?
-    
-    _Tracker{T}(pullback) where T = new(0, pullback, false)
-    _Tracker{T}(pullback, grad::T) where T = new(0, pullback, false, grad)
-    _Tracker{T}(nothing, grad::T) where T = new(0, nothing, true, grad)
-end
 
 # we can have y = 2*x; x is TrackedArray, and we also want to keep 2 into a type for a nice display of the graph and for debugging purposes.
 struct NotTracked{T}
     data::T
 end
+
+Pullback = Union{Function, Nothing}
+# Parent = Union{TrackedReal, TrackedArray, TrackedTuple, NotTracked}
+Parent = Union{TrackedArray, NotTracked}
+Parents = Tuple{Vararg{Parent}}
+
+mutable struct _Tracker{T, Pb<:Pullback, Prs<:Parents}
+    ref::UInt32 # currently used by the backpropagation algo
+    pullback::Pb # a pullback function or nothing for leafs
+    parents::Prs
+    grad::T # TODO: grad appears twice    
+    
+    _Tracker{T,Pb,Prs}(pullback::Pb, parents::Prs) where {T,Pb,Prs} = new(0, pullback, parents)
+    _Tracker{T,Pb,Prs}(pullback::Pb, parents::Prs, grad::T) where {T,Pb,Prs} = new(0, pullback, parents, grad)
+end
+
+
+make_tracked(x::AbstractArray, pullback, parents) = TrackedArray(x, pullback, parents)
+
+# outer constructor to call the inner constructor
+TrackedArray(x::A, pullback::Pb, parents::Prs) where {A <: AbstractArray, Pb <: Pullback, Prs <: Parents} = 
+  TrackedArray{eltype(A),ndims(A),A, _Tracker{A, Pb, Parents}}(x, _Tracker{A, Pb, Parents}(pullback, parents))
+
+TrackedArray(x::A, pullback::Pb, parents::Prs, grad::A) where {A <: AbstractArray, Pb <: Pullback, Prs <: Parents} = 
+  TrackedArray{eltype(A),ndims(A),A, _Tracker{A, Pb, Parents}}(x, _Tracker{A, Pb, Parents}(pullback, parents, grad))
+
+TrackedArray(x::AbstractArray) = TrackedArray(x, nothing, (), zero(x))
+
+Base.eltype(x::Type{<:TrackedArray{T}}) where T <: Real = TrackedReal{T} # TODO: do we need this?
+
+Base.convert(::Type{T}, x::S) where {T<:TrackedArray,S<:T} = x # TODO: do we need this?
