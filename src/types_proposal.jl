@@ -1,3 +1,4 @@
+# Tr is the type of Tracker_
 struct TrackedArray{T,N,A<:AbstractArray{T,N}, Tr} <: AbstractArray{T,N}
     data::A
     tracker::Tr
