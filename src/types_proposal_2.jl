@@ -12,7 +12,7 @@ end
 
 struct TrackedArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
     data::A
-    tracker::_Tracker{T}
+    tracker::_Tracker{A}
     grad::A # todo: grad appears twice
     TrackedArray{T,N,A}(data::A, tr::_Tracker{T}) where {T,N,A} = new(data, tr)
     TrackedArray{T,N,A}(data::A, tr::_Tracker{T}, grad::A) where {T,N,A} = new(data, tr, grad)
