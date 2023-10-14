@@ -6,7 +6,6 @@ struct TrackedArray{T,N,A<:AbstractArray{T,N}, Tr} <: AbstractArray{T,N}
     TrackedArray{T,N,A,Tr}(data::A, tr::Tr, grad::A) where {T,N,A,Tr} = new(data, tr, grad)
 end
 
-
 # we can have y = 2*x; x is TrackedArray, and we also want to keep 2 into a type for a nice display of the graph and for debugging purposes.
 struct NotTracked{T}
     data::T
@@ -28,17 +27,13 @@ mutable struct _Tracker{T, Pb<:Pullback, Prs<:Parents}
 end
 
 
-make_tracked(x::AbstractArray, pullback, parents) = TrackedArray(x, pullback, parents)
-
 # outer constructor to call the inner constructor
 TrackedArray(x::A, pullback::Pb, parents::Prs) where {A <: AbstractArray, Pb <: Pullback, Prs <: Parents} = 
-  TrackedArray{eltype(A),ndims(A),A, _Tracker{A, Pb, Parents}}(x, _Tracker{A, Pb, Parents}(pullback, parents))
+TrackedArray{eltype(A),ndims(A),A, _Tracker{A, Pb, Parents}}(x, _Tracker{A, Pb, Parents}(pullback, parents))
 
 TrackedArray(x::A, pullback::Pb, parents::Prs, grad::A) where {A <: AbstractArray, Pb <: Pullback, Prs <: Parents} = 
-  TrackedArray{eltype(A),ndims(A),A, _Tracker{A, Pb, Parents}}(x, _Tracker{A, Pb, Parents}(pullback, parents, grad))
+TrackedArray{eltype(A),ndims(A),A, _Tracker{A, Pb, Parents}}(x, _Tracker{A, Pb, Parents}(pullback, parents, grad))
 
 TrackedArray(x::AbstractArray) = TrackedArray(x, nothing, (), zero(x))
 
-Base.eltype(x::Type{<:TrackedArray{T}}) where T <: Real = TrackedReal{T} # TODO: do we need this?
-
-Base.convert(::Type{T}, x::S) where {T<:TrackedArray,S<:T} = x # TODO: do we need this?
+make_tracked(x::AbstractArray, pullback, parents) = TrackedArray(x, pullback, parents)
