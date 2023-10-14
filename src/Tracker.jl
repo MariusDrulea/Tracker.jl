@@ -4,7 +4,7 @@ using MacroTools
 using MacroTools: @q, @forward
 
 using ChainRules
-using ChainRules: rrule, RuleConfig, HasReverseMode
+using ChainRules: rrule, RuleConfig, HasReverseMode, unthunk
 using ForwardDiff
 import LogExpFunctions
 import NaNMath
@@ -119,7 +119,7 @@ const dummy_broadcast_style = Base.BroadcastStyle(Float64) # requested by rrule 
 
 # dedicated track method for broadcasted
 function track(bf::typeof(Base.broadcasted), f::F, xs...; kw...) where F
-  @info "Chainrules for $bf($f, $xs)"
+  @info "Chainrules for $bf($f, ...)"
   y, _back = rrule(tracker_rule_cfg, bf, dummy_broadcast_style, f, data.(xs)...; kw...)
   back = Δ->_back(Δ)[4:end] # TODO: what happens if f is a struct?
   track_ctor(Call(back, tracker.(xs)), y)
@@ -129,7 +129,7 @@ end
 for f in (:+, :-, :*, :/)
   @eval begin
     function track(bf::typeof(Base.broadcasted), ::typeof($f), xs...; kw...)
-      @info "Chainrules for $bf($($f), $xs), specialized"
+      @info "Chainrules for $bf($($f), ...), specialized"
       _y, _back = rrule(bf, $f, data.(xs)...; kw...)
       y = Base.materialize(_y)
       back = Δ->_back(Δ)[3:end]
@@ -140,7 +140,7 @@ end
 
 # ^2 also has a dedicated specialization in ChainRules
 function track(bf::typeof(Base.broadcasted), lp::typeof(Base.literal_pow), ::typeof(^), x::TrackedTypes, ::Val{2})
-  @info "Chainrules for $bf($lp, ^, $x, 2), specialized"
+  @info "Chainrules for $bf($lp, ^, ..., 2), specialized"
   _y, _back = rrule(bf, lp, ^, data(x), Val(2))
   y = Base.materialize(_y)
   back = Δ->_back(Δ)[4:4] # 4:4 because the output shall be a tuple, not a scalar
@@ -168,7 +168,6 @@ function track(f::F, xs...; kw...) where F
   @info "Chainrules for $f"
   # untracked primal y; also untracked pullback back as we rrule over the data.(xs)
   y, _back = rrule(f, data.(xs)...; kw...)
-  # the rrule pullback returns (NoTangent(), out_grads) for functions
   # TODO: what happens with structs as functions?
   back = Δ->_back(Δ)[2:end]
   track_ctor(Call(back, tracker.(xs)), y)
