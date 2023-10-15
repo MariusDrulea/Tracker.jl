@@ -91,7 +91,7 @@ accum!(x::Tuple, Δ::Tuple) = accum!.(x, Δ)
 init_grad(x::Tuple) = init_grad.(x)
 zero_grad!(x::Tuple) = zero_grad!.(x)
 
-make_tracked(xs::Tuple, pb::Pullback, pa::Parents) = TrackedTuple{typeof(xs)}(xs, _Tracked(pb, pa, zero.(xs)))
+make_tracked(xs::Tuple, pb::Pullback, pa::Parents) = TrackedTuple{typeof(xs)}(xs, _Tracker(pb, pa, zero.(xs)))
 
 function Base.show(io::IO, xs::TrackedTuple)
   show(io, data(xs))
