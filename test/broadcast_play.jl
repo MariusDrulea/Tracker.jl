@@ -5,7 +5,10 @@ using ChainRules: ChainRules, rrule, NoTangent
 ##
 ta = param([1, 2, 3])
 tb = param([2, 4, 6])
-ta .+ tb
+tc = ta + tb
+s = sum(tc)
+back!(s)
+
 tb = ta.^3
 tb = sum(sin.(1 .+ ta.^2))
 back!(tb)

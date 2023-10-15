@@ -2,19 +2,12 @@
 import ChainRules: rrule
 import Base: +, -, *, /
 
-mutable struct TrackedReal{T<:Real} <: Real
-  data::T
-  tracker::Tracked{T}
-end
-
-TrackedReal(x::Real) = TrackedReal(x, Tracked{typeof(x)}(Call(), zero(x)))
-
+# outer constructor to call the inner constructor
+TrackedReal(x::Real) = TrackedReal(x, _Tracker(nothing, (), zero(x)))
 data(x::TrackedReal) = x.data
 tracker(x::TrackedReal) = x.tracker
 
-ForwardDiff.value(x::TrackedReal) = x.data
-
-track_ctor(f::Call, x::Real) = TrackedReal(x, Tracked{typeof(x)}(f, zero(x)))
+make_tracked(x::Real, pb::Pullback, pa::Parents) = TrackedReal(x, _Tracker(pb, pa, zero(x)))
 
 function back!(x::TrackedReal; once = true)
     isinf(x) && error("Loss is Inf")
@@ -91,11 +84,6 @@ import Base:^
 
 # Tuples
 
-struct TrackedTuple{T<:Tuple}
-  data::T
-  tracker::Tracked{T}
-end
-
 data(xs::TrackedTuple) = xs.data
 tracker(xs::TrackedTuple) = xs.tracker
 
@@ -103,7 +91,7 @@ accum!(x::Tuple, Δ::Tuple) = accum!.(x, Δ)
 init_grad(x::Tuple) = init_grad.(x)
 zero_grad!(x::Tuple) = zero_grad!.(x)
 
-track_ctor(f::Call, xs::Tuple) = TrackedTuple(xs, Tracked{typeof(xs)}(f, zero.(xs)))
+make_tracked(xs::Tuple, pb::Pullback, pa::Parents) = TrackedTuple{typeof(xs)}(xs, _Tracked(pb, pa, zero.(xs)))
 
 function Base.show(io::IO, xs::TrackedTuple)
   show(io, data(xs))

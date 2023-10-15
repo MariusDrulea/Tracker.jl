@@ -18,67 +18,9 @@ import Base: broadcasted
 export TrackedArray, TrackedVector, TrackedMatrix, Params, gradient,
   jacobian, hessian, param, back!, withgradient
 
-tracker(x) = nothing
+include("tracked_types.jl")
 
-istracked(x) = tracker(x) ≠ nothing
-isleaf(x) = !istracked(x) || isleaf(tracker(x))
-grad(x) = grad(tracker(x))
-grad(::Nothing) = nothing
-data(x) = x
-
-"""
-  Call{F,As<:Tuple}
-
-Structure to keep the function `func`::F and it's arguments `args`.
-"""
-struct Call{F,As<:Tuple}
-  func::F
-  args::As
-end
-
-Call(f::F, args::T) where {F,T} = Call{F,T}(f, args)
-Call() = Call(nothing, ())
-
-# When deserialising, the object_id changes
-a::Call == b::Call = a.func == b.func && a.args == b.args
-
-@inline (c::Call)() = c.func(data.(c.args)...)
-
-"""
-  Tracked{T}
-  
-Structure used to keep the operations applied over variables. 
-Represents a node in the graph. To navigate in the graph, use the `f::Call` field. 
-
-# Parameters
-  - `ref`: variable used during the graph traversals, how many times we reached a node
-  - `f::Call`: the Call object containing the recorded function and arguments; kindly note the pullback function is stored instead
-              of the original function; e.g. we store the pullback of + and not the + function itself
-  - `isleaf::Bool`: refers to the node in the built graphs; true if the node (tracked object) is leaf
-  - `grad::T`: use to store the value of the back-propagated gradient. 
-               To further propagate this gradient, let's call it `∇`, the algorithm applies the Jacobian `∇2 = f.func(∇) = J(f_original)*∇` (the pullback). 
-               This new gradient is passed to the "children" of `f` stored in `f.args`.               
-               Note the gradient is not always stored. 
-               For example if the graph is just a straigh-line, no branches, then we simply back-propagate the gradients 
-               from the output to the input params. Only the leafs in the graph (our input params) will store gradients in this case.
-               See the `function back(x::Tracked, Δ, once)` for more details.
-"""
-mutable struct Tracked{T}
-  ref::UInt32  
-  f::Call
-  isleaf::Bool 
-  grad::T
-  Tracked{T}(f::Call) where T = new(0, f, false)
-  Tracked{T}(f::Call, grad::T) where T = new(0, f, false, grad)
-  Tracked{T}(f::Call{Nothing}, grad::T) where T = new(0, f, true, grad)
-end
-
-istracked(x::Tracked) = true
-isleaf(x::Tracked) = x.f == Call()
-grad(x::Tracked) = x.grad
-
-track_ctor(f::Call, x) = Tracked{typeof(x)}(f)
-
+# TODO: remove this function after all it's call are removed; see the grad macro
 function _forward end
 
 # TODO: this function is used to define gradients for a couple of functions, especially in arrays, which are not used,
@@ -109,8 +51,6 @@ include("lib/array.jl")
 include("back.jl")
 include("numeric.jl")
 include("forward.jl")
-
-TrackedTypes = Union{TrackedReal, TrackedArray, TrackedTuple}
 
 # we define this in order to access rrule for broadcasted
 struct TrackerRuleConfig <: RuleConfig{HasReverseMode} end
@@ -170,7 +110,7 @@ function track(f::F, xs...; kw...) where F
   y, _back = rrule(f, data.(xs)...; kw...)
   # TODO: what happens with structs as functions?
   back = Δ->_back(Δ)[2:end]
-  track_ctor(Call(back, tracker.(xs)), y)
+  make_tracked(y, back, xs)
 end
 
 
@@ -249,18 +189,9 @@ rrule(::typeof(nobacksies), f::String, x) = data(x), Δ -> error(f)
 # @grad nobacksies(f::Symbol, x) = data(x), Δ -> error("Nested AD not defined for $f")
 # @grad nobacksies(f::String, x) = data(x), Δ -> error(f)
 
-param(x::Number) = TrackedReal(float(x))
-param(xs::AbstractArray) = TrackedArray(float.(xs))
 
-param(x::TrackedReal) = track(identity, x)
-param(x::TrackedArray) = track(identity, x)
 # TODO: do we need to define a rrule for identity?
 # @grad identity(x) = data(x), Δ -> (Δ,)
 rrule(::typeof(identity), x::TrackedTypes) = data(x), Δ->(NoTangent(), Δ)
 
-# TODO: where is this code used?
-import Adapt: adapt, adapt_structure
-
-adapt_structure(T, xs::TrackedArray) = param(adapt(T, data(xs)))
-
-end
+end #end of module Tracker

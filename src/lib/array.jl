@@ -8,13 +8,12 @@ import LinearAlgebra: inv, det, logdet, logabsdet, \, /
 using Statistics
 using LinearAlgebra: Diagonal, Transpose, Adjoint, diagm, diag
 
-struct TrackedArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
-  tracker::Tracked{A}
-  data::A
-  grad::A
-  TrackedArray{T,N,A}(t::Tracked{A}, data::A) where {T,N,A} = new(t, data)
-  TrackedArray{T,N,A}(t::Tracked{A}, data::A, grad::A) where {T,N,A} = new(t, data, grad)
-end
+# outer constructor to call the inner constructor
+TrackedArray(x::A, pb::Pullback, pa::Parents) where {A <: AbstractArray} = 
+      TrackedArray{eltype(A),ndims(A),A}(x, _Tracker(pb, pa))
+TrackedArray(x::A, pb::Pullback, pa::Parents, grad::A) where {A <: AbstractArray} = 
+      TrackedArray{eltype(A),ndims(A),A}(x, _Tracker(pb, pa, grad))
+TrackedArray(x::AbstractArray) = TrackedArray(x, nothing, (), zero(x))
 
 data(x::TrackedArray) = x.data
 tracker(x::TrackedArray) = x.tracker
@@ -23,15 +22,7 @@ TrackedVector{T,A} = TrackedArray{T,1,A}
 TrackedMatrix{T,A} = TrackedArray{T,2,A}
 TrackedVecOrMat{T,A} = Union{TrackedVector{T,A},TrackedMatrix{T,A}}
 
-track_ctor(c::Call, x::AbstractArray) = TrackedArray(c, x)
-
-TrackedArray(c::Call, x::A) where A <: AbstractArray =
-  TrackedArray{eltype(A),ndims(A),A}(Tracked{A}(c), x)
-
-TrackedArray(c::Call, x::A, Δ::A) where A <: AbstractArray =
-  TrackedArray{eltype(A),ndims(A),A}(Tracked{A}(c, Δ), x, Δ)
-
-TrackedArray(x::AbstractArray) = TrackedArray(Call(), x, zero(x))
+make_tracked(x::AbstractArray, pb::Pullback, pa::Parents) = TrackedArray(x, pb, pa)
 
 Base.eltype(x::Type{<:TrackedArray{T}}) where T <: Real = TrackedReal{T}
 
