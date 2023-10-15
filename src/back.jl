@@ -39,18 +39,18 @@ function scan(x)
 end
 
 function back_(pb::Pullback, pa::Parents, Δ, once)  
-  Δs = pb(unthunk(Δ))  # apply the pullback function
+  Δs = pb(Δ)  # apply the pullback function
   length(Δs) == length(pa) || error("gradient and parents must have the same length: $(length(Δs)) != $(length(pa))")
   # foreach((x, d) -> back(x, d, once), c.args, data.(Δs))
   # TODO: re-enable the above foreach
   for (p, d) in zip(pa, Δs)
-    back(p, d, once)
+    back(p, unthunk(d), once)
   end
 end
 
-back_(pb::Nothing, (), Δ, once) = nothing
+back_(::Nothing, ::Tuple{}, Δ, once) = nothing
 # TODO: pullback can also by of type Missing
-back_(pb::Missing, (), Δ, once) = error("`back!` was already used")
+back_(::Missing, ::Tuple{}, Δ, once) = error("`back!` was already used")
 
 accum!(x, Δ) = x .+ Δ
 accum!(x::AbstractArray, Δ) = (x .+= Δ)
@@ -67,12 +67,15 @@ function back(x::_Tracker, Δ, once)
   end
   if ref == 0
     back_(x.pullback, x.parents, grad, once)
-    once && !isleaf(x) && (x.pullback = missing) && (x.parents = ()) # we want to prevent accidental multi-calls over the same graph, so set the x.f call to missing.
+    once && !isleaf(x) && ((x.pullback, x.parents) = (missing, ())) # we want to prevent accidental multi-calls over the same graph, so set the x.f call to missing.
   end
   return
 end
 
-back(::Nothing, Δ, once) = return # can occur because tracker(non_tracked_obj) return nothing; see the back_ and track methods
+back(x::TrackedTypes, Δ, once) = back(tracker(x), Δ, once)
+back(::Nothing, Δ, once) = return # TODO: handle the NotTracked case; currently can occur because tracker(non_tracked_obj) return nothing; see the back_ and track methods
+back(::Any, Δ, once) = return # TODO: handle the NotTracked case
+
 
 # Interface methods
 
@@ -85,7 +88,7 @@ back(::Nothing, Δ, once) = return # can occur because tracker(non_tracked_obj) 
 function back!(x, Δ; once = true)
   istracked(x) || return
   scan(x)
-  back(tracker(x), Δ, once)
+  back(x, Δ, once)
   return
 end
 

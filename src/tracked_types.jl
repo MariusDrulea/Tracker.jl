@@ -68,8 +68,8 @@ struct NotTracked{T}
 end
 
 TrackedTypes = Union{TrackedReal, TrackedArray, TrackedTuple}
-
-Parent = Union{TrackedReal, TrackedArray, TrackedTuple, NotTracked}
+# TODO: we have added Any until we properly treat NotTracked
+Parent = Union{TrackedReal, TrackedArray, TrackedTuple, NotTracked, Any}
 Parents = Tuple{Vararg{Parent}}
 
 istracked(x::_Tracker) = true

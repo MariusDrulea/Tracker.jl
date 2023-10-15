@@ -62,7 +62,7 @@ function track(bf::typeof(Base.broadcasted), f::F, xs...; kw...) where F
   @info "Chainrules for $bf($f, ...)"
   y, _back = rrule(tracker_rule_cfg, bf, dummy_broadcast_style, f, data.(xs)...; kw...)
   back = Δ->_back(Δ)[4:end] # TODO: what happens if f is a struct?
-  track_ctor(Call(back, tracker.(xs)), y)
+  make_tracked(y, back, xs)
 end
 
 # Arithmetic operations +, -, *, ^ have a dedicated specializations in ChainRules; are these faster? we use them here
@@ -73,7 +73,7 @@ for f in (:+, :-, :*, :/)
       _y, _back = rrule(bf, $f, data.(xs)...; kw...)
       y = Base.materialize(_y)
       back = Δ->_back(Δ)[3:end]
-      track_ctor(Call(back, tracker.(xs)), y)
+      make_tracked(y, back, xs)
     end
   end
 end
@@ -84,7 +84,7 @@ function track(bf::typeof(Base.broadcasted), lp::typeof(Base.literal_pow), ::typ
   _y, _back = rrule(bf, lp, ^, data(x), Val(2))
   y = Base.materialize(_y)
   back = Δ->_back(Δ)[4:4] # 4:4 because the output shall be a tuple, not a scalar
-  track_ctor(Call(back, (tracker(x), )), y)
+  make_tracked(y, back, (x,))
 end
 
 # TODO: we can better define a method to select the range of interested values, e.g. without NoTangent()
@@ -100,7 +100,7 @@ function track(::typeof(Base.getindex), xs...; kw...)
   if typeof(xs[1]) <: TrackedTuple # the rrule getindex from Tuples returns a Tangent{..}(result), compared to arrays where it returns directly the result
     back = Δ->(ChainRules.ChainRulesCore.backing(_back(Δ)[2]),)
   end
-  track_ctor(Call(back, tracker.(xs[1:1])), y)   
+  make_tracked(y, back, xs[1:1])   
   # TODO: only tracker.(xs[1:1]), tracker(index) is nothing; hm... use the operations on NoTangent() and avoid all this special treatment?
 end
 

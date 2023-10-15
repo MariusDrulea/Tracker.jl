@@ -7,11 +7,24 @@ ta = param([1, 2, 3])
 tb = param([2, 4, 6])
 tc = ta + tb
 s = sum(tc)
+# back!(s)
 back!(s)
+ta.tracker.grad
 
-tb = ta.^3
-tb = sum(sin.(1 .+ ta.^2))
-back!(tb)
+##
+ta = param([1, 2, 3])
+tb = ta .+ 1
+##
+ta = param([1, 2, 3])
+tb = ta.^2
+s = sum(tb)
+back!(s)
+ta.tracker.grad
+
+##
+ta = param([1, 2, 3])
+tc = sum(sin.(1 .+ ta.^2))
+back!(tc)
 ta.tracker.grad
 
 
