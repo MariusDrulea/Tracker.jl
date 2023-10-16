@@ -1,4 +1,4 @@
-using Tracker: Tracker, param, TrackedArray, TrackedReal, TrackedTypes, track, back!
+using Tracker: Tracker, param, TrackedArray, TrackedReal, TrackedTypes, track, back!, print_graph
 using LinearAlgebra: diagm, dot, LowerTriangular, norm, det, logdet, logabsdet, I, Diagonal
 using ChainRules: ChainRules, rrule, NoTangent
 
@@ -14,6 +14,9 @@ ta.tracker.grad
 ##
 ta = param([1, 2, 3])
 tb = ta .+ 1
+
+print_graph(stdout, tb)
+
 ##
 ta = param([1, 2, 3])
 tb = ta.^2

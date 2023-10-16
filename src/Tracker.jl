@@ -113,47 +113,39 @@ function track(f::F, xs...; kw...) where F
   make_tracked(y, back, xs)
 end
 
-
-"Function to print the graph of an Call"
-function print_graph_(io::IO, f::Call, indent, indent_all)
-  println(io, indent_all*"Call=")
-  indent_all *= indent
-
-  println(io, indent_all, "f")
-  if !isnothing(f.func) && !isnothing(f.func)
-    println(io, indent*indent_all, f.func)
-    fnms = fieldnames(typeof(f.func))
-    for fnm in fnms
-      println(io, indent*indent*indent_all*"func."*string(fnm)*"=", getfield(f.func, fnm))
-    end
-  end
-  
-  println(io, indent_all*"args")
-  for arg in f.args
-    if istracked(arg)
-      print_graph_(io, arg, indent, indent*indent_all)
-    else
-      println(io, indent*indent_all, arg)
-    end
-  end
+function print_graph(io::IO, x::ConstantNode, indent, indent_all)
+  println(io, indent_all*"ConstantNode=", x)
 end
 
 "Function to print the graph of an Tracked"
-function print_graph_(io::IO, x::Tracked, indent, indent_all)
+function print_graph(io::IO, x::_Tracker, indent, indent_all)
   println(io, indent_all*"Tracker=")
   indent_all *= indent
-  println(io, indent_all*"isleaf=", x.isleaf)
+  println(io, indent_all*"pullback=", x.pullback)
   grad = isdefined(x, :grad) ? x.grad : undef
   println(io, indent_all*"grad=", grad)
-  print_graph_(io, x.f, indent, indent_all)
+  # print_graph_(io, x.f, indent, indent_all)
+  if isempty(x.parents)
+    println(io, indent_all*"Parents=()")
+    return
+  end
+  
+  println(io, indent_all*"Parents=")
+  indent_all *= indent
+  for p in x.parents    
+    print_graph(io::IO, p, indent, indent_all)
+  end
 end
 
 "Function to print the graph of an TrackedArray, TrackedReal, TrackedTuple}"
-function print_graph(io::IO, x; indent="-")
-  println(io, "TrackedData")
-  println(io, indent*"data=", data(x))  
-  print_graph_(io, tracker(x), indent, indent)
+function print_graph(io::IO, x::TrackedTypes, indent="-", indent_all="")
+  println(io, indent_all*"TrackedType")
+  indent_all *= indent
+  println(io, indent_all*"data=", data(x))  
+  print_graph(io, tracker(x), indent, indent_all)
 end
+
+print_graph(io::IO, x::TrackedTypes; indent="-") = print_graph(io, x, indent, "")
 
 """
     hook(f, x) -> x′
