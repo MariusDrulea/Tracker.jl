@@ -18,18 +18,16 @@ init_grad(x) = zero(x)
 zero_grad!(x) = zero(x)
 zero_grad!(x::AbstractArray) = (x .= 0)
 
-scan(c::Call) = foreach(scan, c.args)
-
 """
 Recursivelly scan all tracked data in the  and sets the gradients of all tracked data to zero.
 Also counts the `ref`, how many times a node (a Tracked object) is hit during traversal. This is equivalent to
 the number of children of this node. This `ref` field of tracked objects is later used in the `back` method. 
 """
-function scan(x::Tracked)
-  x.isleaf && return
+function scan(x::_Tracker)
+  isleaf(x) && return
   ref = x.ref += 1
   if ref == 1
-    scan(x.f)
+    foreach(scan, x.parents)
     isdefined(x, :grad) && (x.grad = zero_grad!(x.grad))
   end
   return
@@ -40,24 +38,24 @@ function scan(x)
   return
 end
 
-function back_(c::Call, Δ, once)  
-  Δs = c.func(unthunk(Δ))  # apply the pullback function
-  length(Δs) == length(c.args) || error("gradient and $(c.func) args must have the same length: $(length(Δs)) != $(length(c.args))")
+function back_(pb::Pullback, pa::Parents, Δ, once)  
+  Δs = pb(Δ)  # apply the pullback function
+  length(Δs) == length(pa) || error("gradient and parents must have the same length: $(length(Δs)) != $(length(pa))")
   # foreach((x, d) -> back(x, d, once), c.args, data.(Δs))
   # TODO: re-enable the above foreach
-  for (x, d) in zip(c.args, data.(Δs))
-    back(x, d, once)
+  for (p, d) in zip(pa, Δs)
+    back(p, unthunk(d), once)
   end
 end
 
-back_(::Call{Nothing}, Δ, once) = nothing # TODO: can we really get here?
-back_(::Call{Missing}, Δ, once) = error("`back!` was already used")
+back_(::Nothing, ::Tuple{}, Δ, once) = nothing
+back_(::Missing, ::Tuple{}, Δ, once) = error("`back!` was already used")
 
 accum!(x, Δ) = x .+ Δ
 accum!(x::AbstractArray, Δ) = (x .+= Δ)
 
-function back(x::Tracked, Δ, once)
-  x.isleaf && (x.grad = accum!(x.grad, Δ); return)
+function back(x::_Tracker, Δ, once)
+  isleaf(x) && (x.grad = accum!(x.grad, Δ); return)
   ref = x.ref -= 1
   grad = if isdefined(x, :grad)
     x.grad = accum!(x.grad, Δ)
@@ -67,13 +65,14 @@ function back(x::Tracked, Δ, once)
     Δ # no need to store the gradient in this case, we want to save memory
   end
   if ref == 0
-    back_(x.f, grad, once)
-    once && !x.isleaf && (x.f = Call(missing, ())) # we want to prevent accidental multi-calls over the same graph, so set the x.f call to missing.
+    back_(x.pullback, x.parents, grad, once)
+    once && !isleaf(x) && ((x.pullback, x.parents) = (missing, ())) # we want to prevent accidental multi-calls over the same graph, so set the x.f call to missing.
   end
   return
 end
 
-back(::Nothing, Δ, once) = return # we have an arg of a Call, which is nothing, meaning is not tracked
+back(x::TrackedTypes, Δ, once) = back(tracker(x), Δ, once)
+back(::NotTracked, Δ, once) = return
 
 # Interface methods
 
@@ -86,7 +85,7 @@ back(::Nothing, Δ, once) = return # we have an arg of a Call, which is nothing,
 function back!(x, Δ; once = true)
   istracked(x) || return
   scan(x)
-  back(tracker(x), Δ, once)
+  back(x, Δ, once)
   return
 end
 

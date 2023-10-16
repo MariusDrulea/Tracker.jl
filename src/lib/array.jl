@@ -8,13 +8,12 @@ import LinearAlgebra: inv, det, logdet, logabsdet, \, /
 using Statistics
 using LinearAlgebra: Diagonal, Transpose, Adjoint, diagm, diag
 
-struct TrackedArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
-  tracker::Tracked{A}
-  data::A
-  grad::A
-  TrackedArray{T,N,A}(t::Tracked{A}, data::A) where {T,N,A} = new(t, data)
-  TrackedArray{T,N,A}(t::Tracked{A}, data::A, grad::A) where {T,N,A} = new(t, data, grad)
-end
+# outer constructor to call the inner constructor
+TrackedArray(x::A, pb::Pullback, pa::Parents) where {A <: AbstractArray} = 
+      TrackedArray{eltype(A),ndims(A),A}(x, _Tracker(pb, pa))
+TrackedArray(x::A, pb::Pullback, pa::Parents, grad::A) where {A <: AbstractArray} = 
+      TrackedArray{eltype(A),ndims(A),A}(x, _Tracker(pb, pa, grad))
+TrackedArray(x::AbstractArray) = TrackedArray(x, nothing, (), zero(x))
 
 data(x::TrackedArray) = x.data
 tracker(x::TrackedArray) = x.tracker
@@ -23,15 +22,7 @@ TrackedVector{T,A} = TrackedArray{T,1,A}
 TrackedMatrix{T,A} = TrackedArray{T,2,A}
 TrackedVecOrMat{T,A} = Union{TrackedVector{T,A},TrackedMatrix{T,A}}
 
-track_ctor(c::Call, x::AbstractArray) = TrackedArray(c, x)
-
-TrackedArray(c::Call, x::A) where A <: AbstractArray =
-  TrackedArray{eltype(A),ndims(A),A}(Tracked{A}(c), x)
-
-TrackedArray(c::Call, x::A, Δ::A) where A <: AbstractArray =
-  TrackedArray{eltype(A),ndims(A),A}(Tracked{A}(c, Δ), x, Δ)
-
-TrackedArray(x::AbstractArray) = TrackedArray(Call(), x, zero(x))
+make_tracked(x::AbstractArray, pb::Pullback, pa::Parents) = TrackedArray(x, pb, pa)
 
 Base.eltype(x::Type{<:TrackedArray{T}}) where T <: Real = TrackedReal{T}
 
@@ -196,16 +187,16 @@ Base.kron(a::AbstractVecOrMat, b::TrackedVecOrMat) = _kron(a, b)
 inv(A::TrackedArray) = Tracker.track(inv, A)
 
 #       (/) rdivide
-A::TrackedArray     / B::TrackedArray     = Tracker.track(/, A, B)
-A::AbstractVecOrMat / B::TrackedArray     = Tracker.track(/, A, B)
-A::TrackedArray     / B::AbstractVecOrMat = Tracker.track(/, A, B)
+A::TrackedArray     / B::TrackedArray     = TrAnyAnyacker.track(/, A, B)
+A::AbstractVecOrMat / B::TrackedArray     = Tracker.track(/, NT(A), B)
+A::TrackedArray     / B::AbstractVecOrMat = Tracker.track(/, A, NT(B))
 
 #       (\) ldivide  (left vec divide needs more work to resolve dispatch ambiguity)
 A::TrackedArray     \ B::TrackedArray     = Tracker.track(\, A, B)
-A::AbstractArray    \ B::TrackedArray     = Tracker.track(\, A, B)
-A::TrackedArray     \ B::AbstractVecOrMat = Tracker.track(\, A, B)
-A::AbstractMatrix   \ B::TrackedVecOrMat  = Tracker.track(\, A, B)
-A::TrackedMatrix    \ B::TrackedVecOrMat  = Tracker.track(\, A, B)
+A::AbstractArray    \ B::TrackedArray     = Tracker.track(\, NT(A), B)
+A::TrackedArray     \ B::AbstractVecOrMat = Tracker.track(\, A, NT(B))
+A::AbstractMatrix   \ B::TrackedVecOrMat  = Tracker.track(\, NT(A), B)
+A::TrackedMatrix    \ B::TrackedVecOrMat  = Tracker.track(\, A, NT(B))
 
 # Reductions
 
@@ -220,8 +211,8 @@ Base.findfirst(xs::TrackedArray, args...) = findfirst(xs.data, args...)
 import LinearAlgebra: dot
 
 dot(xs::TrackedArray, ys::TrackedArray) = track(dot, xs, ys)
-dot(xs::AbstractArray, ys::TrackedArray) = track(dot, xs, ys)
-dot(xs::TrackedArray, ys::AbstractArray) = track(dot, xs, ys)
+dot(xs::AbstractArray, ys::TrackedArray) = track(dot, NT(xs), ys)
+dot(xs::TrackedArray, ys::AbstractArray) = track(dot, xs, NT(ys))
 
 # TODO: still needs hacks? 
 # Hacks to get std working
@@ -248,60 +239,53 @@ LinearAlgebra.diagm(x::Pair{<:Integer, <:TrackedVector}) = track(diagm, x...)
 # fix Matrix(Diagonal(param([1,2,3]))) after https://github.com/JuliaLang/julia/pull/44615
 (::Type{Matrix})(d::Diagonal{<:Any,<:TrackedArray}) = diagm(0 => d.diag)
 
-x::TrackedMatrix  * y::AbstractMatrix = track(*, x, y)
-x::AbstractMatrix * y::TrackedMatrix  = track(*, x, y)
+x::TrackedMatrix  * y::AbstractMatrix = track(*, x, NT(y))
+x::AbstractMatrix * y::TrackedMatrix  = track(*, NT(x), y)
 x::TrackedMatrix  * y::TrackedMatrix  = track(*, x, y)
 
-x::TrackedMatrix  * y::AbstractVector = track(*, x, y)
-x::AbstractMatrix * y::TrackedVector  = track(*, x, y)
+x::TrackedMatrix  * y::AbstractVector = track(*, x, NT(y))
+x::AbstractMatrix * y::TrackedVector  = track(*, NT(x), y)
 x::TrackedMatrix  * y::TrackedVector  = track(*, x, y)
 
-x::TrackedVector  * y::AbstractVector = track(*, x, y)
-x::AbstractVector * y::TrackedVector  = track(*, x, y)
+x::TrackedVector  * y::AbstractVector = track(*, x, NT(y))
+x::AbstractVector * y::TrackedVector  = track(*, NT(x), y)
 x::TrackedVector  * y::TrackedVector  = track(*, x, y)
 
-# TODO handle this
-x::TrackedArray + y::TrackedArray = track(+, x, y)
-x::Real * y::TrackedArray = track(*, x, y)
+# x::TrackedArray + y::TrackedArray = track(+, x, y)
+# x::Real * y::TrackedArray = track(*, x, y)
+# x::TrackedReal * y::TrackedArray = track(*, x, y)
 
 # Ambiguity fixes
-Base.:*(x::Transpose{T,<:AbstractVector{T}},y::TrackedMatrix) where {T} = track(*, x, y)
-Base.:*(x::TrackedMatrix,y::Transpose{T,<:AbstractVector{T}}) where {T} = track(*, x, y)
+# TODO: handle NotTracked here
+Base.:*(x::TrackedMatrix,y::Transpose{T,<:AbstractVector{T}}) where {T} = track(*, x, NT(y))
+Base.:*(x::TrackedMatrix,y::Transpose{T,<:AbstractMatrix{T}}) where {T} = track(*, x, NT(y))
+Base.:*(x::TrackedVector,y::Transpose{T,<:AbstractVector{T}}) where {T} = track(*, x, NT(y))
+Base.:*(x::TrackedVector,y::Transpose{T,<:AbstractMatrix{T}}) where {T} = track(*, x, NT(y))
 
-Base.:*(x::Transpose{T,<:AbstractMatrix{T}},y::TrackedMatrix) where {T} = track(*, x, y)
-Base.:*(x::TrackedMatrix,y::Transpose{T,<:AbstractMatrix{T}}) where {T} = track(*, x, y)
+Base.:*(x::Transpose{T,<:AbstractMatrix{T}},y::TrackedMatrix) where {T} = track(*, NT(x), y)
+Base.:*(x::Transpose{T,<:AbstractVector{T}},y::TrackedMatrix) where {T} = track(*, NT(x), y)
+Base.:*(x::Transpose{T,<:AbstractVector{T}},y::TrackedVector) where {T} = track(*, NT(x), y)
+Base.:*(x::Transpose{T,<:AbstractMatrix{T}},y::TrackedVector) where {T} = track(*, NT(x), y)
 
-Base.:*(x::Transpose{T,<:AbstractVector{T}},y::TrackedVector) where {T} = track(*, x, y)
-Base.:*(x::TrackedVector,y::Transpose{T,<:AbstractVector{T}}) where {T} = track(*, x, y)
-
-Base.:*(x::Transpose{T,<:AbstractMatrix{T}},y::TrackedVector) where {T} = track(*, x, y)
-Base.:*(x::TrackedVector,y::Transpose{T,<:AbstractMatrix{T}}) where {T} = track(*, x, y)
-
-Base.:*(x::Adjoint{T,<:AbstractVector{T}},y::TrackedMatrix) where {T} = track(*, x, y)
-Base.:*(x::TrackedMatrix,y::Adjoint{T,<:AbstractVector{T}}) where {T} = track(*, x, y)
-
+Base.:*(x::Adjoint{T,<:AbstractVector{T}},y::TrackedMatrix) where {T} = track(*, NT(x), y)
 Base.:*(x::Adjoint{T,<:AbstractMatrix{T}},y::TrackedMatrix) where {T} = track(*, x, y)
-Base.:*(x::TrackedMatrix,y::Adjoint{T,<:AbstractMatrix{T}}) where {T} = track(*, x, y)
-
 Base.:*(x::Adjoint{T,<:AbstractVector{T}},y::TrackedVector) where {T} = track(*, x, y)
-Base.:*(x::TrackedVector,y::Adjoint{T,<:AbstractVector{T}}) where {T} = track(*, x, y)
-
 Base.:*(x::Adjoint{T,<:AbstractMatrix{T}},y::TrackedVector) where {T} = track(*, x, y)
+
+Base.:*(x::TrackedMatrix,y::Adjoint{T,<:AbstractVector{T}}) where {T} = track(*, x, NT(y))
+Base.:*(x::TrackedMatrix,y::Adjoint{T,<:AbstractMatrix{T}}) where {T} = track(*, x, y)
+Base.:*(x::TrackedVector,y::Adjoint{T,<:AbstractVector{T}}) where {T} = track(*, x, y)
 Base.:*(x::TrackedVector,y::Adjoint{T,<:AbstractMatrix{T}}) where {T} = track(*, x, y)
 
 Base.:*(x::Diagonal, y::TrackedVector) = track(*, x, y)
-
 Base.:*(x::Diagonal, y::TrackedMatrix) = track(*, x, y)
 Base.:*(x::TrackedMatrix, y::Diagonal) = track(*, x, y)
 
-# TODO I guess we have these definitions in ChainRules
-# @grad a::AbstractVecOrMat * b::AbstractVecOrMat =
-#   data(a)*data(b), Δ -> (Δ * transpose(b), transpose(a) * Δ)
-
-
 # Broadcasting
-Base.broadcasted(f::F, x::TrackedArray, y::Union{Real, AbstractArray}) where {F} = track(Base.broadcasted, f, x, y)
-Base.broadcasted(f::F, x::Union{Real, AbstractArray}, y::TrackedArray) where {F} = track(Base.broadcasted, f, x, y)
+Base.broadcasted(f::F, x::TrackedArray, y::Union{Real, AbstractArray}) where {F} = track(Base.broadcasted, f, x, NT(y))
+Base.broadcasted(f::F, x::Union{Real, AbstractArray}, y::TrackedArray) where {F} = track(Base.broadcasted, f, NT(x), y)
+Base.broadcasted(f::F, x::TrackedReal, y::TrackedArray) where {F} = track(Base.broadcasted, f, x, y)
+Base.broadcasted(f::F, x::TrackedArray, y::TrackedReal) where {F} = track(Base.broadcasted, f, x, y)
 Base.broadcasted(f::F, x::TrackedArray, y::TrackedArray) where {F} = track(Base.broadcasted, f, x, y)
 Base.broadcasted(f::F, x::TrackedArray) where {F} = track(Base.broadcasted, f, x) # for sin., cos. etc
 # TODO: solve x.^p, where p is integer > 2; and x.^3.5
