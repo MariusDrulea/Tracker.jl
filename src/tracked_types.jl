@@ -64,16 +64,16 @@ end
 Constant Node in the graph.
 we can have y = 2*x; x is TrackedArray, and we also want to keep 2 into a type for a nice display of the graph and for debugging purposes.
 """
-struct ConstNode{T}
+struct ConstantNode{T}
   data::T
 end
 
-data(x::ConstNode) = x.data
+data(x::ConstantNode) = x.data
 
-CN(data::T) where T = ConstNode{T}(data) # convenient outer ctor; short name as it is used a lot in the capturing methods
+CN(data::T) where T = ConstantNode{T}(data) # convenient outer ctor; short name as it is used a lot in the capturing methods
 
 TrackedTypes = Union{TrackedReal, TrackedArray, TrackedTuple}
-Parent = Union{TrackedReal, TrackedArray, TrackedTuple, ConstNode}
+Parent = Union{TrackedReal, TrackedArray, TrackedTuple, ConstantNode}
 Parents = Tuple{Vararg{Parent}}
 
 istracked(x::_Tracker) = true

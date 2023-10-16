@@ -256,7 +256,7 @@ x::TrackedVector  * y::TrackedVector  = track(*, x, y)
 # x::TrackedReal * y::TrackedArray = track(*, x, y)
 
 # Ambiguity fixes
-# TODO: handle ConstNode here
+# TODO: handle ConstantNode here
 Base.:*(x::TrackedMatrix,y::Transpose{T,<:AbstractVector{T}}) where {T} = track(*, x, CN(y))
 Base.:*(x::TrackedMatrix,y::Transpose{T,<:AbstractMatrix{T}}) where {T} = track(*, x, CN(y))
 Base.:*(x::TrackedVector,y::Transpose{T,<:AbstractVector{T}}) where {T} = track(*, x, CN(y))
