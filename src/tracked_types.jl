@@ -67,9 +67,12 @@ struct NotTracked{T}
   data::T
 end
 
+data(x::NotTracked) = x.data
+
+NT = NotTracked # convenient alias
+
 TrackedTypes = Union{TrackedReal, TrackedArray, TrackedTuple}
-# TODO: we have added Any until we properly treat NotTracked
-Parent = Union{TrackedReal, TrackedArray, TrackedTuple, NotTracked, Any}
+Parent = Union{TrackedReal, TrackedArray, TrackedTuple, NotTracked}
 Parents = Tuple{Vararg{Parent}}
 
 istracked(x::_Tracker) = true

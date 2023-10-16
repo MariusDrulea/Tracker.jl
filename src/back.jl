@@ -49,7 +49,6 @@ function back_(pb::Pullback, pa::Parents, Δ, once)
 end
 
 back_(::Nothing, ::Tuple{}, Δ, once) = nothing
-# TODO: pullback can also by of type Missing
 back_(::Missing, ::Tuple{}, Δ, once) = error("`back!` was already used")
 
 accum!(x, Δ) = x .+ Δ
@@ -73,9 +72,7 @@ function back(x::_Tracker, Δ, once)
 end
 
 back(x::TrackedTypes, Δ, once) = back(tracker(x), Δ, once)
-back(::Nothing, Δ, once) = return # TODO: handle the NotTracked case; currently can occur because tracker(non_tracked_obj) return nothing; see the back_ and track methods
-back(::Any, Δ, once) = return # TODO: handle the NotTracked case
-
+back(::NotTracked, Δ, once) = return
 
 # Interface methods
 
