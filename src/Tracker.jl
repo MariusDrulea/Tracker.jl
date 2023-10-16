@@ -113,39 +113,6 @@ function track(f::F, xs...; kw...) where F
   make_tracked(y, back, xs)
 end
 
-function print_graph(io::IO, x::ConstantNode, indent, indent_all)
-  println(io, indent_all*"ConstantNode=", x)
-end
-
-"Function to print the graph of an Tracked"
-function print_graph(io::IO, x::_Tracker, indent, indent_all)
-  println(io, indent_all*"Tracker=")
-  indent_all *= indent
-  println(io, indent_all*"pullback=", x.pullback)
-  grad = isdefined(x, :grad) ? x.grad : undef
-  println(io, indent_all*"grad=", grad)
-  # print_graph_(io, x.f, indent, indent_all)
-  if isempty(x.parents)
-    println(io, indent_all*"Parents=()")
-    return
-  end
-  
-  println(io, indent_all*"Parents=")
-  indent_all *= indent
-  for p in x.parents    
-    print_graph(io::IO, p, indent, indent_all)
-  end
-end
-
-"Function to print the graph of an TrackedArray, TrackedReal, TrackedTuple}"
-function print_graph(io::IO, x::TrackedTypes, indent="-", indent_all="")
-  println(io, indent_all*"TrackedType")
-  indent_all *= indent
-  println(io, indent_all*"data=", data(x))  
-  print_graph(io, tracker(x), indent, indent_all)
-end
-
-print_graph(io::IO, x::TrackedTypes; indent="-") = print_graph(io, x, indent, "")
 
 """
     hook(f, x) -> x′
