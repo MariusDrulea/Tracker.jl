@@ -8,25 +8,23 @@ data(x) = x
 
 Pullback = Union{Function, Nothing, Missing}
 
-# TODO: update this after refactoring types
 """
   Tracked{T}
   
 Structure used to keep the operations applied over variables. 
-Represents a node in the graph. To navigate in the graph, use the `f::Call` field. 
 
 # Parameters
   - `ref`: variable used during the graph traversals, how many times we reached a node
-  - `f::Call`: the Call object containing the recorded function and arguments; kindly note the pullback function is stored instead
+  - `pullback`: the Call object containing the recorded function and arguments; kindly note the pullback function is stored instead
               of the original function; e.g. we store the pullback of + and not the + function itself
-  - `isleaf::Bool`: refers to the node in the built graphs; true if the node (tracked object) is leaf
-  - `grad::T`: use to store the value of the back-propagated gradient. 
-               To further propagate this gradient, let's call it `∇`, the algorithm applies the Jacobian `∇2 = f.func(∇) = J(f_original)*∇` (the pullback). 
-               This new gradient is passed to the "children" of `f` stored in `f.args`.               
+  - `parents`: if c = a + b, the parents of c would be a and b, while the pullback is given by the rrule of +
+  - `grad`: use to store the value of the back-propagated gradient. 
+               To further propagate this gradient, let's call it `∇`, the algorithm applies the Jacobian `∇2 = pullback(∇) = J(f_original)*∇` (the pullback). 
+               This new gradient is passed to the `parents`               
                Note the gradient is not always stored. 
                For example if the graph is just a straigh-line, no branches, then we simply back-propagate the gradients 
                from the output to the input params. Only the leafs in the graph (our input params) will store gradients in this case.
-               See the `function back(x::Tracked, Δ, once)` for more details.
+               See the `function back(x::_Tracker, Δ, once)` for more details.
 """
 mutable struct _Tracker
   ref::UInt32 # currently used by the backpropagation algo
