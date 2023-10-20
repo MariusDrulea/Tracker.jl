@@ -70,7 +70,9 @@ end
 
 # TODO: for chainrules
 for op in [:+, :-, :*, :/]
-  @eval Base.$op(x::TrackedReal, y::TrackedReal) = track(Base.$op, x, y)
+  # @eval Base.$op(x::TrackedReal, y::TrackedReal) = track(Base.$op, x, y)
+  @eval Base.$op(x::Real, y::TrackedReal) = track(Base.$op, x, y)
+  @eval Base.$op(x::TrackedReal, y::Real) = track(Base.$op, x, y)
 end
 
 for op in [:sin, :cos]

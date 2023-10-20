@@ -73,7 +73,8 @@ data(x::ConstantNode) = x.data
 CN(data::T) where T = ConstantNode{T}(data) # convenient outer ctor; short name as it is used a lot in the capturing methods
 
 TrackedTypes = Union{TrackedReal, TrackedArray, TrackedTuple}
-Parent = Union{TrackedReal, TrackedArray, TrackedTuple, ConstantNode}
+# Parent = Union{TrackedReal, TrackedArray, TrackedTuple, ConstantNode}
+Parent = Any # the parent can have any type
 Parents = Tuple{Vararg{Parent}}
 
 istracked(x::_Tracker) = true

@@ -73,6 +73,7 @@ end
 
 back(x::TrackedTypes, Δ, once) = back(tracker(x), Δ, once)
 back(::ConstantNode, Δ, once) = return
+back(::Any, Δ, once) = return
 
 # Interface methods
 
